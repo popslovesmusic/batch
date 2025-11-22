@@ -1,10 +1,37 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper that runs batch_extract.py.
-
-This preserves the historical hyphenated entrypoint while allowing
-Windows users to call either `batch-extract.py` or `batch_extract.py`.
 """
-<<<<<<< ours
+IGSOA Batch Library Compiler
+
+What it does (single run):
+- Recursively scans a source repo for .md files.
+- For each file:
+  * Extracts nested sections/subsections + logical units + sealed boxes
+  * Saves every extracted section VERBATIM
+  * Writes a per-section REPORT (fingerprint + concepts + local claims)
+  * Computes a per-file fingerprint (sha256 + mtime + concept/structure signatures)
+- Groups processed outputs by TOPIC into root-level topic folders.
+- Keeps ALL versions (even mutually exclusive ones).
+- Flags:
+  * Strict conceptual contradictions (mutually exclusive claims)
+  * Divergent variants (nuanced disagreements / different formulations)
+- Builds global indexes + cross-references:
+  * 00_MASTER_INDEX.md
+  * 00_TOPIC_INDEX.md
+  * 00_CONTRADICTION_REPORT.md
+  * 00_AXIOM_REGISTRY.md
+  * 00_THEOREM_REGISTRY.md
+  * 00_CONCEPT_INDEX.md
+  * 00_VERSION_MAP.md
+  * 00_CROSS_REFERENCE_GRAPH.md
+  * library_index.json
+
+Usage:
+  python igsoa_batch_pipeline.py <source_root> <output_root> [--concepts concepts.txt]
+
+Notes:
+- Heuristic contradiction detection (conceptual + nuanced).
+- You can tune TOPIC_KEYWORDS and CLAIM_PATTERNS below anytime.
+"""
 
 import re, json, sys, hashlib
 from dataclasses import dataclass, field
@@ -648,9 +675,6 @@ def main():
 
     print("\n✓ Batch library build complete.")
     print(f"Output: {output_root}")
-=======
-from batch_extract import main
->>>>>>> theirs
 
 if __name__ == "__main__":
     main()
