@@ -14,6 +14,11 @@ Run the compiler against a Markdown source directory and an output directory:
 
 ```bash
 <<<<<<< ours
+<<<<<<< ours
+=======
+# Either entrypoint works (hyphenated retained for backwards compatibility)
+python batch_extract.py <source_root> <output_root> [--concepts concepts.txt] [--path-limit 230]
+>>>>>>> theirs
 =======
 # Either entrypoint works (hyphenated retained for backwards compatibility)
 python batch_extract.py <source_root> <output_root> [--concepts concepts.txt] [--path-limit 230]
@@ -23,10 +28,22 @@ python batch-extract.py <source_root> <output_root> [--concepts concepts.txt] [-
 
 The optional `--concepts` flag points to a file with one concept per line; otherwise, a built-in list is used. Use `--path-limit`
 <<<<<<< ours
+<<<<<<< ours
 to adjust the maximum generated path length (defaults to 230 characters, tuned for Windows).
 =======
 to adjust the maximum generated path length (defaults to 230 characters, tuned for Windows). On Windows command prompts, be sure
 to call the underscore variant if your environment has trouble resolving hyphenated filenames.
+>>>>>>> theirs
+=======
+to adjust the maximum generated path length (defaults to 230 characters, tuned for Windows). On Windows command prompts, be sure
+to call the underscore variant if your environment has trouble resolving hyphenated filenames. If the hyphenated entrypoint
+ever becomes corrupted (e.g., contains leftover merge markers), run:
+
+```bash
+python batch_extract.py --repair-entrypoints
+```
+
+This will rewrite `batch-extract.py` to a clean wrapper.
 >>>>>>> theirs
 
 ## Output overview

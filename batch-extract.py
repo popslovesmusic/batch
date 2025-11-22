@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper that runs batch_extract.py.
+<<<<<<< ours
 
 This preserves the historical hyphenated entrypoint while allowing
 Windows users to call either `batch-extract.py` or `batch_extract.py`.
@@ -649,6 +650,13 @@ def main():
     print("\n✓ Batch library build complete.")
     print(f"Output: {output_root}")
 =======
+from batch_extract import main
+>>>>>>> theirs
+=======
+This preserves the historical hyphenated entrypoint while allowing
+Windows users to call either `batch-extract.py` or `batch_extract.py`.
+"""
+
 from batch_extract import main
 >>>>>>> theirs
 

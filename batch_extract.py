@@ -203,6 +203,21 @@ def build_tree(text: str) -> List[Node]:
 
 PATH_LIMIT = 230  # conservative limit to avoid Windows MAX_PATH failures
 
+<<<<<<< ours
+=======
+ENTRYPOINT_WRAPPER = """#!/usr/bin/env python3
+\"\"\"Compatibility wrapper that runs batch_extract.py.
+This preserves the historical hyphenated entrypoint while allowing
+Windows users to call either `batch-extract.py` or `batch_extract.py`.
+\"\"\"
+from batch_extract import main
+
+if __name__ == "__main__":
+    main()
+"""
+
+
+>>>>>>> theirs
 def sanitize(name: str, max_len: int = 80) -> str:
     name = re.sub(r'[<>:"/\\|?*]', '', name)
     name = re.sub(r'\s+', '_', name.strip())
@@ -619,6 +634,7 @@ def write_library_json(entries, contradictions, variants, outroot: Path):
     }
     (outroot / "library_index.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+<<<<<<< ours
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="IGSOA batch library compiler")
@@ -629,6 +645,40 @@ def main():
                     help=f"Maximum path length budget for generated folders (default {PATH_LIMIT})")
     args = ap.parse_args()
 
+=======
+def repair_entrypoints():
+    """Rewrite the hyphenated wrapper with a clean copy."""
+    repo_root = Path(__file__).resolve().parent
+    wrapper_path = repo_root / "batch-extract.py"
+    wrapper_path.write_text(ENTRYPOINT_WRAPPER, encoding="utf-8")
+    try:
+        wrapper_path.chmod(wrapper_path.stat().st_mode | 0o111)
+    except OSError:
+        pass
+    print(f"[info] refreshed {wrapper_path.name}")
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="IGSOA batch library compiler")
+    ap.add_argument("source_root", nargs="?", help="Repo/source root containing .md files")
+    ap.add_argument("output_root", nargs="?", help="Root folder to write topic-grouped library")
+    ap.add_argument("--concepts", help="Optional concepts.txt (one concept per line)")
+    ap.add_argument("--path-limit", type=int, default=PATH_LIMIT,
+                    help=f"Maximum path length budget for generated folders (default {PATH_LIMIT})")
+    ap.add_argument("--repair-entrypoints", action="store_true",
+                    help="Rewrite batch-extract.py wrapper and exit")
+    args = ap.parse_args()
+
+    if args.repair_entrypoints:
+        repair_entrypoints()
+        if not args.source_root or not args.output_root:
+            return
+
+    if not args.source_root or not args.output_root:
+        ap.error("source_root and output_root are required unless --repair-entrypoints is used")
+
+>>>>>>> theirs
     source_root = Path(args.source_root)
     output_root = Path(args.output_root)
     concepts = load_concepts(args.concepts)
