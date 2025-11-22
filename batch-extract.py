@@ -201,10 +201,33 @@ def build_tree(text: str) -> List[Node]:
         stack.pop()
     return nodes
 
-def sanitize(name: str) -> str:
+PATH_LIMIT = 230  # conservative limit to avoid Windows MAX_PATH failures
+
+def sanitize(name: str, max_len: int = 80) -> str:
     name = re.sub(r'[<>:"/\\|?*]', '', name)
     name = re.sub(r'\s+', '_', name.strip())
-    return name[:120]
+    name = name.strip("._") or "untitled"
+    if len(name) <= max_len:
+        return name
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    keep = max(4, max_len - len(digest) - 1)
+    return f"{name[:keep]}_{digest}"
+
+def safe_component(base: Path, label: str, ordinal: Optional[int] = None, path_limit: int = PATH_LIMIT) -> str:
+    """Create a filesystem-safe component while respecting a global path limit.
+
+    The resulting name fits within `path_limit` once joined to `base`, avoiding
+    Windows MAX_PATH errors by truncating with a stable hash when necessary.
+    The `base` path is resolved to avoid under-counting when the caller passes
+    a relative path.
+    """
+    prefix = f"{ordinal:02d}_" if ordinal is not None else ""
+    base_len = len(str(base.resolve()))
+    available = path_limit - base_len - 1  # leave room for separator
+    available = max(1, available)
+    body_limit = max(1, available - len(prefix))
+    body = sanitize(label, max_len=body_limit)
+    return prefix + body[:body_limit]
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -300,8 +323,8 @@ def file_fingerprint(md: Path, concepts: List[str], claims: List[Dict[str, Any]]
     }
     return {"sha256": h, "mtime_iso": mtime, "concept_signature": csig, "structural_signature": ssig}
 
-def write_node(node: Node, text: str, outdir: Path, ordinal: int, file_meta: Dict):
-    folder_name = f"{ordinal:02d}_{sanitize(node.title)}"
+def write_node(node: Node, text: str, outdir: Path, ordinal: int, file_meta: Dict, path_limit: int) -> str:
+    folder_name = safe_component(outdir, node.title, ordinal, path_limit=path_limit)
     node_dir = outdir / folder_name
     node_dir.mkdir(parents=True, exist_ok=True)
 
@@ -326,8 +349,8 @@ def write_node(node: Node, text: str, outdir: Path, ordinal: int, file_meta: Dic
 
     child_info = []
     for i, child in enumerate(node.children, 1):
-        write_node(child, text, node_dir, i, file_meta)
-        child_info.append((i, child.title))
+        child_folder = write_node(child, text, node_dir, i, file_meta, path_limit)
+        child_info.append((i, child.title, child_folder))
 
     index_lines = [
         f"# Index: {node.title}",
@@ -343,11 +366,13 @@ def write_node(node: Node, text: str, outdir: Path, ordinal: int, file_meta: Dic
         "- **00_SECTION.md** — verbatim text of this section",
         "- **00_REPORT.json** — extraction report for this section",
     ]
-    for i, title in child_info:
-        index_lines.append(f"- **{i:02d}_{sanitize(title)}/** — {title}")
+    for i, title, folder in child_info:
+        index_lines.append(f"- **{folder}/** — {title}")
     (node_dir / "00_INDEX.md").write_text("\n".join(index_lines), encoding="utf-8")
 
-def extract_to_tree(md_path: Path, outdir: Path, topic: str, concepts: List[str], source_rel: str):
+    return folder_name
+
+def extract_to_tree(md_path: Path, outdir: Path, topic: str, concepts: List[str], source_rel: str, path_limit: int):
     text = md_path.read_text(encoding="utf-8", errors="ignore")
     nodes = build_tree(text) or [Node(level=1, title=md_path.stem, start=0, end=len(text))]
 
@@ -357,8 +382,10 @@ def extract_to_tree(md_path: Path, outdir: Path, topic: str, concepts: List[str]
     file_meta = {"source_rel": source_rel, "topic": topic, "concepts_all": concepts, "fingerprint": fingerprint}
 
     outdir.mkdir(parents=True, exist_ok=True)
+    top_sections = []
     for i, node in enumerate(nodes, 1):
-        write_node(node, text, outdir, i, file_meta)
+        folder = write_node(node, text, outdir, i, file_meta, path_limit)
+        top_sections.append((i, node.title, folder))
 
     lines = [
         "# File Root Index",
@@ -371,8 +398,8 @@ def extract_to_tree(md_path: Path, outdir: Path, topic: str, concepts: List[str]
         "## Top-Level Sections",
         "",
     ]
-    for i, n in enumerate(nodes, 1):
-        lines.append(f"{i}. **{n.title}** → `{i:02d}_{sanitize(n.title)}/`")
+    for i, n_title, folder in top_sections:
+        lines.append(f"{i}. **{n_title}** → `{folder}/`")
     (outdir / "00_FILE_INDEX.md").write_text("\n".join(lines), encoding="utf-8")
 
     return {
@@ -598,11 +625,14 @@ def main():
     ap.add_argument("source_root", help="Repo/source root containing .md files")
     ap.add_argument("output_root", help="Root folder to write topic-grouped library")
     ap.add_argument("--concepts", help="Optional concepts.txt (one concept per line)")
+    ap.add_argument("--path-limit", type=int, default=PATH_LIMIT,
+                    help=f"Maximum path length budget for generated folders (default {PATH_LIMIT})")
     args = ap.parse_args()
 
     source_root = Path(args.source_root)
     output_root = Path(args.output_root)
     concepts = load_concepts(args.concepts)
+    path_limit = args.path_limit
 
     if not source_root.exists():
         print(f"[error] source root not found: {source_root}")
@@ -621,10 +651,14 @@ def main():
         text = md.read_text(encoding="utf-8", errors="ignore")
         topic = infer_topic(Path(rel), text, concepts)
 
-        paper_outdir = output_root / f"topic_{topic}" / sanitize(md.stem)
-        entry = extract_to_tree(md, paper_outdir, topic, concepts, rel)
+        topic_dir_name = safe_component(output_root, f"topic_{topic}", path_limit=path_limit)
+        topic_outdir = output_root / topic_dir_name
+        paper_dir_name = safe_component(topic_outdir, md.stem, path_limit=path_limit)
+        paper_outdir = topic_outdir / paper_dir_name
+
+        entry = extract_to_tree(md, paper_outdir, topic, concepts, rel, path_limit)
         entries.append(entry)
-        print(f"✓ processed {rel} → topic_{topic}/{sanitize(md.stem)}")
+        print(f"✓ processed {rel} → {topic_dir_name}/{paper_dir_name}")
 
     contradictions, variants = analyze_contradictions(entries)
 
